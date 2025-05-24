@@ -7,6 +7,7 @@
 
 #define DM_MSG_PREFIX "dmp"
 
+// Структура для хранения статистики
 struct dmp_stats
 {
     atomic64_t read_reqs;
@@ -15,12 +16,14 @@ struct dmp_stats
     atomic64_t write_bytes;
 };
 
+// Структура для устройства
 struct dmp_device
 {
     struct dm_dev*   dev;
     struct dmp_stats stats;
 };
 
+// Глобальная структура модуля
 static struct
 {
     struct kobject*  kobj;
@@ -29,12 +32,14 @@ static struct
 }
 dmp_mod;
 
+// Операции Device Mapper
 static int dmp_map(struct dm_target* ti, struct bio* bio)
 {
     struct dmp_device* dmp_dev = ti->private;
     struct dmp_stats*  stats   = &dmp_dev->stats;
     unsigned int       bytes   = bio->bi_iter.bi_size;
 
+    // Обновляем статистику в зависимости от операции
     switch (bio_op(bio))
     {
 	    case REQ_OP_READ:
@@ -70,6 +75,7 @@ static int dmp_map(struct dm_target* ti, struct bio* bio)
     return DM_MAPIO_SUBMITTED;
 }
 
+// Инициализация устройства (конструктор)
 static int dmp_ctr(struct dm_target* ti, unsigned int argc, char** argv)
 {
     struct dmp_device* dmp_dev;
@@ -81,7 +87,8 @@ static int dmp_ctr(struct dm_target* ti, unsigned int argc, char** argv)
         return -EINVAL;
     }
 
-    dmp_dev = kmalloc(sizeof(*dmp_dev), GFP_KERNEL);
+    // Выделение памяти в пространстве ядра
+    dmp_dev = kmalloc(sizeof(struct dmp_device), GFP_KERNEL);
 
     if (!dmp_dev)
     {
@@ -89,11 +96,13 @@ static int dmp_ctr(struct dm_target* ti, unsigned int argc, char** argv)
         return -ENOMEM;
     }
 
+    // Инициализация статистики устройства
     atomic64_set(&dmp_dev->stats.read_reqs, 0);
     atomic64_set(&dmp_dev->stats.write_reqs, 0);
     atomic64_set(&dmp_dev->stats.read_bytes, 0);
     atomic64_set(&dmp_dev->stats.write_bytes, 0);
 
+    // Добавление нового блочного устройства
     ret = dm_get_device(ti, argv[0], dm_table_get_mode(ti->table), &dmp_dev->dev);
 
     if (ret)
@@ -107,19 +116,15 @@ static int dmp_ctr(struct dm_target* ti, unsigned int argc, char** argv)
     return 0;
 }
 
+// Деинициализация устройства (деструктор)
 static void dmp_dtr(struct dm_target* ti)
 {
     struct dmp_device* dmp_dev = ti->private;
-    dm_put_device(ti, dmp_dev->dev);
-    kfree(dmp_dev);
+    dm_put_device(ti, dmp_dev->dev); // Удаление блочного устройства
+    kfree(dmp_dev); // Очистка памяти
 }
 
-static void dmp_io_hints(struct dm_target* ti, struct queue_limits* limits)
-{
-	limits->max_hw_discard_sectors = UINT_MAX;
-	limits->discard_granularity    = 512;
-}
-
+// Определение target type
 static struct target_type dmp_target =
 {
     .name     = "dmp",
@@ -129,9 +134,9 @@ static struct target_type dmp_target =
     .ctr      = dmp_ctr,
     .dtr      = dmp_dtr,
     .map      = dmp_map,
-    .io_hints = dmp_io_hints,
 };
 
+// Sysfs интерфейс для чтения статистики (сбор, подсчёт и возврат в форматированном виде)
 static ssize_t volumes_show(struct kobject* kobj, struct kobj_attribute* attr, char* buf)
 {
     struct dmp_stats* stats = &dmp_mod.stats;
@@ -161,17 +166,21 @@ static ssize_t volumes_show(struct kobject* kobj, struct kobj_attribute* attr, c
         total_reqs, avg_total_size);
 }
 
+// Атрибут kobject (только для чтения)
 static struct kobj_attribute volumes_attr = __ATTR_RO(volumes);
 
+// Инициализация модуля
 static int __init dmp_init(void)
 {
     int ret;
 
+    // Инициализация статистики модуля
     atomic64_set(&dmp_mod.stats.read_reqs, 0);
     atomic64_set(&dmp_mod.stats.write_reqs, 0);
     atomic64_set(&dmp_mod.stats.read_bytes, 0);
     atomic64_set(&dmp_mod.stats.write_bytes, 0);
 
+    // Создание структуры kobject для ведения статистики
     dmp_mod.kobj = &THIS_MODULE->mkobj.kobj;
     dmp_mod.stat_kobj = kobject_create_and_add("stat", dmp_mod.kobj);
 
@@ -180,6 +189,7 @@ static int __init dmp_init(void)
         return -ENOMEM;
     }
 
+    // Создание файла атрибутов sysfs
     ret = sysfs_create_file(dmp_mod.stat_kobj, &volumes_attr.attr);
 
     if (ret)
@@ -188,6 +198,7 @@ static int __init dmp_init(void)
         return ret;
     }
 
+    // Регистрация устройства для device mapper
     ret = dm_register_target(&dmp_target);
 
     if (ret)
@@ -200,11 +211,12 @@ static int __init dmp_init(void)
     return 0;
 }
 
+// Деинициализация модуля
 static void __exit dmp_exit(void)
 {
-    dm_unregister_target(&dmp_target);
-    sysfs_remove_file(dmp_mod.stat_kobj, &volumes_attr.attr);
-    kobject_put(dmp_mod.stat_kobj);
+    dm_unregister_target(&dmp_target); // Снятие регистрации устройства devide mapper
+    sysfs_remove_file(dmp_mod.stat_kobj, &volumes_attr.attr); // Удаление файла атрибутов sysfs
+    kobject_put(dmp_mod.stat_kobj); // Удаление структуры kobject для ведения статистики
 }
 
 module_init(dmp_init);
