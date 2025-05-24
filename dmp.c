@@ -36,31 +36,37 @@ static int dmp_map(struct dm_target* ti, struct bio* bio)
     struct dmp_stats*  stats   = &dmp_dev->stats;
     unsigned int       bytes   = bio->bi_iter.bi_size;
 
-    bio_set_dev(bio, dmp_dev->dev->bdev);
+    switch (bio_op(bio))
+    {
+	    case REQ_OP_READ:
 
-    if (bio_data_dir(bio) == READ)
-    {
-        atomic64_inc(&stats->read_reqs);
-        atomic64_add(bytes, &stats->read_bytes);
-    }
-    else
-    {
-        atomic64_inc(&stats->write_reqs);
-        atomic64_add(bytes, &stats->write_bytes);
-    }
+		    if (bio->bi_opf & REQ_RAHEAD)
+            {
+			    return DM_MAPIO_KILL;
+		    }
 
-    if (bio_data_dir(bio) == READ)
-    {
-        atomic64_inc(&dmp_mod.stats.read_reqs);
-        atomic64_add(bytes, &dmp_mod.stats.read_bytes);
-    }
-    else
-    {
-        atomic64_inc(&dmp_mod.stats.write_reqs);
-        atomic64_add(bytes, &dmp_mod.stats.write_bytes);
-    }
+            atomic64_inc(&stats->read_reqs);
+            atomic64_add(bytes, &stats->read_bytes);
+            atomic64_inc(&stats->write_reqs);
+            atomic64_add(bytes, &stats->write_bytes);
 
-    return DM_MAPIO_REMAPPED;
+            break;
+
+    	case REQ_OP_WRITE:
+    	case REQ_OP_DISCARD:
+            atomic64_inc(&dmp_mod.stats.read_reqs);
+            atomic64_add(bytes, &dmp_mod.stats.read_bytes);
+            atomic64_inc(&dmp_mod.stats.write_reqs);
+            atomic64_add(bytes, &dmp_mod.stats.write_bytes);
+		    break;
+
+	    default:
+		    return DM_MAPIO_KILL;
+	}
+
+	bio_endio(bio);
+
+    return DM_MAPIO_SUBMITTED;
 }
 
 static int dmp_ctr(struct dm_target* ti, unsigned int argc, char** argv)
@@ -88,6 +94,7 @@ static int dmp_ctr(struct dm_target* ti, unsigned int argc, char** argv)
     atomic64_set(&dmp_dev->stats.write_bytes, 0);
 
     ret = dm_get_device(ti, argv[0], dm_table_get_mode(ti->table), &dmp_dev->dev);
+
     if (ret)
     {
         ti->error = "Device lookup failed";
@@ -126,15 +133,22 @@ static void dmp_status(struct dm_target* ti, status_type_t type, unsigned int st
     }
 }
 
+static void dmp_io_hints(struct dm_target* ti, struct queue_limits* limits)
+{
+	limits->max_hw_discard_sectors = UINT_MAX;
+	limits->discard_granularity    = 512;
+}
+
 static struct target_type dmp_target =
 {
-    .name    = "dmp",
-    .version = {1, 0, 0},
-    .module  = THIS_MODULE,
-    .ctr     = dmp_ctr,
-    .dtr     = dmp_dtr,
-    .map     = dmp_map,
-    .status  = dmp_status,
+    .name     = "dmp",
+    .version  = {1, 0, 0},
+    .module   = THIS_MODULE,
+    .ctr      = dmp_ctr,
+    .dtr      = dmp_dtr,
+    .map      = dmp_map,
+    .io_hints = dmp_io_hints,
+    .status   = dmp_status,
 };
 
 static ssize_t volumes_show(struct kobject* kobj, struct kobj_attribute* attr, char* buf)

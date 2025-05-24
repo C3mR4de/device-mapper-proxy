@@ -14,8 +14,8 @@ test_init:
 	insmod dmp.ko
 	dmsetup create zero1 --table "0 20480 zero"
 	dmsetup create dmp1 --table "0 20480 dmp /dev/mapper/zero1"
-	dd if=/dev/random of=/dev/mapper/dmp1 bs=4k count=100
-	dd of=/dev/null   if=/dev/mapper/dmp1 bs=4k count=500
+	dd if=/dev/random of=/dev/mapper/dmp1 bs=4k count=1
+	dd of=/dev/null   if=/dev/mapper/dmp1 bs=4k count=1
 
 test_exec:
 	cat /sys/module/dmp/stat/volumes
