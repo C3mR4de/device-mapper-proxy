@@ -2,7 +2,6 @@
 #include <linux/init.h>
 #include <linux/bio.h>
 #include <linux/device-mapper.h>
-#include <linux/slab.h>
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 
@@ -54,10 +53,12 @@ static int dmp_map(struct dm_target* ti, struct bio* bio)
 
     	case REQ_OP_WRITE:
     	case REQ_OP_DISCARD:
+
             atomic64_inc(&dmp_mod.stats.read_reqs);
             atomic64_add(bytes, &dmp_mod.stats.read_bytes);
             atomic64_inc(&dmp_mod.stats.write_reqs);
             atomic64_add(bytes, &dmp_mod.stats.write_bytes);
+
 		    break;
 
 	    default:
@@ -113,26 +114,6 @@ static void dmp_dtr(struct dm_target* ti)
     kfree(dmp_dev);
 }
 
-static void dmp_status(struct dm_target* ti, status_type_t type, unsigned int status_flags, char* result, unsigned int maxlen)
-{
-    struct dmp_device* dmp_dev = ti->private;
-    int sz = 0;
-
-    switch (type)
-    {
-        case STATUSTYPE_INFO:
-            result[0] = '\0';
-            break;
-
-        case STATUSTYPE_TABLE:
-            DMEMIT("%s", dmp_dev->dev->name);
-            break;
-
-        default:
-            break;
-    }
-}
-
 static void dmp_io_hints(struct dm_target* ti, struct queue_limits* limits)
 {
 	limits->max_hw_discard_sectors = UINT_MAX;
@@ -143,12 +124,12 @@ static struct target_type dmp_target =
 {
     .name     = "dmp",
     .version  = {1, 0, 0},
+    .features = DM_TARGET_NOWAIT,
     .module   = THIS_MODULE,
     .ctr      = dmp_ctr,
     .dtr      = dmp_dtr,
     .map      = dmp_map,
     .io_hints = dmp_io_hints,
-    .status   = dmp_status,
 };
 
 static ssize_t volumes_show(struct kobject* kobj, struct kobj_attribute* attr, char* buf)
