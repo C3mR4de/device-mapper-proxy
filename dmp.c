@@ -121,7 +121,7 @@ static void dmp_dtr(struct dm_target* ti)
 {
     struct dmp_device* dmp_dev = ti->private;
     dm_put_device(ti, dmp_dev->dev); // Удаление блочного устройства
-    kfree(dmp_dev); // Очистка памяти
+    kfree(dmp_dev);                  // Очистка памяти
 }
 
 // Определение target type
@@ -214,9 +214,9 @@ static int __init dmp_init(void)
 // Деинициализация модуля
 static void __exit dmp_exit(void)
 {
-    dm_unregister_target(&dmp_target); // Снятие регистрации устройства devide mapper
+    dm_unregister_target(&dmp_target);                        // Снятие регистрации устройства device mapper
     sysfs_remove_file(dmp_mod.stat_kobj, &volumes_attr.attr); // Удаление файла атрибутов sysfs
-    kobject_put(dmp_mod.stat_kobj); // Удаление структуры kobject для ведения статистики
+    kobject_put(dmp_mod.stat_kobj);                           // Удаление структуры kobject для ведения статистики
 }
 
 module_init(dmp_init);
