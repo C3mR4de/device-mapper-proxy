@@ -7,7 +7,7 @@
 
 Устанавливаем все необходимые зависимости:
 
-```sudo pacman -Syu base-devel kmod device-mapper sysfsutils linux-lts-headers gcc make```
+```pacman -Syu base-devel kmod device-mapper sysfsutils linux-lts-headers gcc make```
 
 В случае, если используется стандартное ядро `linux` или другая его модификация (например, `linux-zen`), следует вместо пакета `linux-lts-headers` установить соответствующий пакет заголовочных файлов.
 
